@@ -53,7 +53,8 @@ test("an until-done chain continues only while it makes progress and products ar
   const run = (overrides) => ({ audited: 100, stoppedEarly: "time budget reached", ...overrides });
   assert.equal(continueDecision(run(), 500).continue, true);
   assert.equal(continueDecision(run(), 0).continue, false);
-  assert.equal(continueDecision(run({ stoppedEarly: "3 consecutive failed batches" }), 500).continue, false);
+  assert.deepEqual(continueDecision(run({ stoppedEarly: "3 consecutive failed batches" }), 500), { continue: true, cooldown: true, reason: "" },
+    "a run that made progress before repeated errors continues after a cooldown");
   assert.equal(continueDecision(run({ audited: 0 }), 3).continue, false, "only products the model keeps skipping are left");
 });
 

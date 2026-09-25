@@ -109,7 +109,10 @@ jobs:
           AUDIT_LIMIT: ${{ inputs.limit }}
           AUDIT_FROM_ID: ${{ inputs.from_id }}
           AUDIT_TO_ID: ${{ inputs.to_id }}
+          COOLDOWN: ${{ steps.audit.outputs.cooldown }}
+        # After a run stopped by repeated Gemini errors, wait before the next one tries again.
         run: |
+          if [ "$COOLDOWN" = "true" ]; then sleep 300; fi
           gh workflow run audit.yml --repo "$GITHUB_REPOSITORY" --ref "$GITHUB_REF_NAME" -f until_done=true \
             ${AUDIT_LIMIT:+-f limit="$AUDIT_LIMIT"} ${AUDIT_FROM_ID:+-f from_id="$AUDIT_FROM_ID"} ${AUDIT_TO_ID:+-f to_id="$AUDIT_TO_ID"}
 

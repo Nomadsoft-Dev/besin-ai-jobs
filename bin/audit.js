@@ -57,7 +57,7 @@ async function writeStepSummary(summary, { dryRun, fromId, toId, force, remainin
     `- Başarısız istek grubu: ${summary.failedBatches}`,
     summary.stoppedEarly ? `- Erken durdu: ${summary.stoppedEarly}` : "",
     remaining === null ? "" : `- Denetlenmeyi bekleyen ürün: ${remaining}`,
-    untilDone ? `- Zincir: ${next.continue ? "sonraki çalışma başlatıldı" : `durdu (${next.reason})`}` : "",
+    untilDone ? `- Zincir: ${next.continue ? `sonraki çalışma başlatıldı${next.cooldown ? " (Gemini hataları nedeniyle 5 dakika sonra)" : ""}` : `durdu (${next.reason})`}` : "",
   ].filter(Boolean);
   await fs.appendFile(process.env.GITHUB_STEP_SUMMARY, [
     dryRun ? "## Ürün denetimi (deneme, veritabanına yazılmadı)" : "## Ürün denetimi", "", ...lines, "",
@@ -109,10 +109,11 @@ async function main() {
       }
     }
     const remaining = dryRun || force ? null : Math.max(pending - summary.audited, 0);
-    const next = untilDone ? continueDecision(summary, remaining) : { continue: false, reason: "" };
+    const next = untilDone ? continueDecision(summary, remaining) : { continue: false, cooldown: false, reason: "" };
     console.log(`\n[audit] done: ${JSON.stringify({ ...summary, remaining })}${untilDone ? `; chain: ${next.continue ? "next run dispatched" : `stops (${next.reason})`}` : ""}`);
     await writeStepSummary(summary, { dryRun, fromId, toId, force, remaining, untilDone, next });
     await writeOutput("continue", next.continue);
+    await writeOutput("cooldown", Boolean(next.cooldown));
     if (selected.length && !summary.audited) process.exitCode = 1;
   } finally {
     await client.end();

@@ -309,14 +309,14 @@ async function auditBatches({
   return summary;
 }
 
-// Whether an until-done chain starts another run. It stops when nothing is left, when this run
-// made no progress (only products the model keeps skipping are left) or when the API kept
-// failing; the next scheduled run picks up from there.
+// Whether an until-done chain starts another run. It continues while runs make progress, also
+// when the API kept failing (cooldown: the next run waits first, as Gemma overloads come and go).
+// It stops when nothing is left or a run audited nothing (the API is down, or only products the
+// model keeps skipping are left); the next scheduled run picks up from there.
 function continueDecision(summary, remaining) {
-  if (!remaining) return { continue: false, reason: "denetlenecek ürün kalmadı" };
-  if (summary.stoppedEarly === STOPPED_BY_FAILURES) return { continue: false, reason: "Gemini art arda hata verdi" };
-  if (!summary.audited) return { continue: false, reason: "bu çalışmada hiç ürün denetlenemedi" };
-  return { continue: true, reason: "" };
+  if (!remaining) return { continue: false, cooldown: false, reason: "denetlenecek ürün kalmadı" };
+  if (!summary.audited) return { continue: false, cooldown: false, reason: "bu çalışmada hiç ürün denetlenemedi" };
+  return { continue: true, cooldown: summary.stoppedEarly === STOPPED_BY_FAILURES, reason: "" };
 }
 
 module.exports = {

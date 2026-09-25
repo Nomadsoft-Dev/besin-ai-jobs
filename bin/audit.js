@@ -10,6 +10,13 @@ const { loadConfig } = require("../src/config");
 const { createGeminiClient } = require("../src/gemini");
 
 function parseArgs(args) {
+  const nonNegativeInteger = (flag) => {
+    const index = args.indexOf(flag);
+    if (index < 0) return null;
+    const value = Number(args[index + 1]);
+    if (!Number.isInteger(value) || value < 0) throw new Error(`${flag} must be a non-negative integer`);
+    return value;
+  };
   const positiveInteger = (flag) => {
     const index = args.indexOf(flag);
     if (index < 0) return null;
@@ -24,6 +31,7 @@ function parseArgs(args) {
     force: args.includes("--force"),
     dryRun: args.includes("--dry-run"),
     untilDone: args.includes("--until-done"),
+    emptyRuns: nonNegativeInteger("--empty-runs") ?? 0,
   };
   if (options.fromId !== null && options.toId !== null && options.fromId > options.toId) {
     throw new Error("--from-id must not be greater than --to-id");
@@ -58,7 +66,7 @@ async function writeStepSummary(summary, { dryRun, fromId, toId, force, remainin
     summary.fallbackBatches ? `- Yedek modelin cevapladığı grup: ${summary.fallbackBatches}` : "",
     summary.stoppedEarly ? `- Erken durdu: ${summary.stoppedEarly}` : "",
     remaining === null ? "" : `- Denetlenmeyi bekleyen ürün: ${remaining}`,
-    untilDone ? `- Zincir: ${next.continue ? `sonraki çalışma başlatıldı${next.cooldown ? " (Gemini hataları nedeniyle 5 dakika sonra)" : ""}` : `durdu (${next.reason})`}` : "",
+    untilDone ? `- Zincir: ${next.continue ? `sonraki çalışma başlatıldı${next.cooldownMinutes ? ` (Gemini hataları nedeniyle ${next.cooldownMinutes} dakika sonra)` : ""}` : `durdu (${next.reason})`}` : "",
   ].filter(Boolean);
   await fs.appendFile(process.env.GITHUB_STEP_SUMMARY, [
     dryRun ? "## Ürün denetimi (deneme, veritabanına yazılmadı)" : "## Ürün denetimi", "", ...lines, "",
@@ -69,7 +77,7 @@ async function main() {
   const root = path.resolve(__dirname, "..");
   const config = loadConfig(root);
   if (!config.databaseUrl) throw new Error("SUPABASE_DB_URL is required");
-  const { limit, fromId, toId, force, dryRun, untilDone } = parseArgs(process.argv.slice(2));
+  const { limit, fromId, toId, force, dryRun, untilDone, emptyRuns } = parseArgs(process.argv.slice(2));
   const gemini = createGeminiClient(config.gemini);
   const template = await fs.readFile(path.join(root, "prompts", "audit-products.txt"), "utf8");
 
@@ -110,11 +118,12 @@ async function main() {
       }
     }
     const remaining = dryRun || force ? null : Math.max(pending - summary.audited, 0);
-    const next = untilDone ? continueDecision(summary, remaining) : { continue: false, cooldown: false, reason: "" };
-    console.log(`\n[audit] done: ${JSON.stringify({ ...summary, remaining })}${untilDone ? `; chain: ${next.continue ? "next run dispatched" : `stops (${next.reason})`}` : ""}`);
+    const next = untilDone ? continueDecision(summary, remaining, emptyRuns) : { continue: false, cooldownMinutes: 0, emptyRuns: 0, reason: "" };
+    console.log(`\n[audit] done: ${JSON.stringify({ ...summary, remaining })}${untilDone ? `; chain: ${next.continue ? `next run dispatched${next.cooldownMinutes ? ` after ${next.cooldownMinutes} min` : ""}` : `stops (${next.reason})`}` : ""}`);
     await writeStepSummary(summary, { dryRun, fromId, toId, force, remaining, untilDone, next });
     await writeOutput("continue", next.continue);
-    await writeOutput("cooldown", Boolean(next.cooldown));
+    await writeOutput("cooldown_minutes", next.cooldownMinutes);
+    await writeOutput("empty_runs", next.emptyRuns);
     if (selected.length && !summary.audited) process.exitCode = 1;
   } finally {
     await client.end();

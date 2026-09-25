@@ -18,6 +18,18 @@ class GeminiError extends Error {
   }
 }
 
+// Parses the answer, also when the model wrapped the JSON in a code fence or added text around it.
+function parseJsonLoose(content) {
+  try {
+    return JSON.parse(content);
+  } catch (error) {
+    const start = content.indexOf("{");
+    const end = content.lastIndexOf("}");
+    if (start < 0 || end <= start) throw error;
+    return JSON.parse(content.slice(start, end + 1));
+  }
+}
+
 // Joins the answer's text parts and skips thought parts.
 function responseText(body) {
   const parts = body?.candidates?.[0]?.content?.parts;
@@ -113,7 +125,7 @@ function createGeminiClient(options) {
       throw new GeminiError(`Gemini returned no content: ${reason}`, { retryable: true });
     }
     try {
-      return { output: JSON.parse(content), usage: body.usageMetadata || null };
+      return { output: parseJsonLoose(content), usage: body.usageMetadata || null };
     } catch {
       const finish = body?.candidates?.[0]?.finishReason || "unknown";
       throw new GeminiError(`Gemini returned invalid JSON (finishReason ${finish}, ${content.length} chars)`, { retryable: true });
@@ -169,4 +181,4 @@ function createGeminiClient(options) {
   return { model, fallbackModel, keyCount: apiKeys.length, slots: apiKeys.length * keyConcurrency, generateJson };
 }
 
-module.exports = { GeminiError, createGeminiClient, responseText };
+module.exports = { GeminiError, createGeminiClient, parseJsonLoose, responseText };

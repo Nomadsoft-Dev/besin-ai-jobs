@@ -30,6 +30,11 @@ on:
         required: false
         default: ""
         type: string
+      empty_runs:
+        description: Zincir için; elle doldurma
+        required: false
+        default: ""
+        type: string
       dry_run:
         description: Deneme (veritabanına yazmaz; limit boşsa 20 ürün). Bulgular public loga yazılmaz, sadece sayılar görünür.
         required: false
@@ -78,7 +83,7 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GEMINI_API_KEY_2: ${{ secrets.GEMINI_API_KEY_2 }}
           AUDIT_MODEL: ${{ vars.AUDIT_MODEL || 'gemma-4-31b-it' }}
-          AUDIT_FALLBACK_MODEL: ${{ vars.AUDIT_FALLBACK_MODEL || 'gemma-4-26b-a4b-it' }}
+          AUDIT_FALLBACK_MODEL: ${{ vars.AUDIT_FALLBACK_MODEL || 'none' }}
           AUDIT_DAILY_LIMIT: ${{ vars.AUDIT_DAILY_LIMIT || '1000' }}
           AUDIT_MAX_MINUTES: ${{ vars.AUDIT_MAX_MINUTES || '90' }}
           AUDIT_KEY_CONCURRENCY: ${{ vars.AUDIT_KEY_CONCURRENCY || '2' }}
@@ -88,6 +93,7 @@ jobs:
           AUDIT_TO_ID: ${{ inputs.to_id }}
           AUDIT_FORCE: ${{ inputs.force && '1' || '' }}
           AUDIT_UNTIL_DONE: ${{ inputs.until_done && '1' || '' }}
+          AUDIT_EMPTY_RUNS: ${{ inputs.empty_runs }}
           AUDIT_DRY_RUN: ${{ inputs.dry_run && '1' || '' }}
         # The script stops starting work at AUDIT_MAX_MINUTES (at most 330) and the last request
         # ends within ~6 minutes; the extra 20 minutes only stop a hung process.
@@ -99,21 +105,24 @@ jobs:
           timeout "$((minutes + 20))m" node bin/audit.js \
             ${AUDIT_LIMIT:+--limit "$AUDIT_LIMIT"} \
             ${AUDIT_FROM_ID:+--from-id "$AUDIT_FROM_ID"} ${AUDIT_TO_ID:+--to-id "$AUDIT_TO_ID"} ${AUDIT_FORCE:+--force} \
-            ${AUDIT_UNTIL_DONE:+--until-done} ${AUDIT_DRY_RUN:+--dry-run}
+            ${AUDIT_UNTIL_DONE:+--until-done} ${AUDIT_EMPTY_RUNS:+--empty-runs "$AUDIT_EMPTY_RUNS"} ${AUDIT_DRY_RUN:+--dry-run}
 
       # GITHUB_TOKEN may start workflow_dispatch runs (unlike other events). The new run waits in
       # the concurrency group until this one ends.
       - name: Start the next run
-        if: ${{ steps.audit.outputs.continue == 'true' }}
+        # Also after a failed audit step (a run that audited nothing exits with an error); a cancelled
+        # run ends the chain.
+        if: ${{ !cancelled() && steps.audit.outputs.continue == 'true' }}
         env:
           GH_TOKEN: ${{ github.token }}
           AUDIT_LIMIT: ${{ inputs.limit }}
           AUDIT_FROM_ID: ${{ inputs.from_id }}
           AUDIT_TO_ID: ${{ inputs.to_id }}
-          COOLDOWN: ${{ steps.audit.outputs.cooldown }}
-        # After a run stopped by repeated Gemini errors, wait before the next one tries again.
+          COOLDOWN_MINUTES: ${{ steps.audit.outputs.cooldown_minutes }}
+          EMPTY_RUNS: ${{ steps.audit.outputs.empty_runs }}
+        # After a run that ended on Gemini errors, wait before the next one tries again.
         run: |
-          if [ "$COOLDOWN" = "true" ]; then sleep 300; fi
-          gh workflow run audit.yml --repo "$GITHUB_REPOSITORY" --ref "$GITHUB_REF_NAME" -f until_done=true \
+          sleep "$(( ${COOLDOWN_MINUTES:-0} * 60 ))"
+          gh workflow run audit.yml --repo "$GITHUB_REPOSITORY" --ref "$GITHUB_REF_NAME" -f until_done=true -f empty_runs="${EMPTY_RUNS:-0}" \
             ${AUDIT_LIMIT:+-f limit="$AUDIT_LIMIT"} ${AUDIT_FROM_ID:+-f from_id="$AUDIT_FROM_ID"} ${AUDIT_TO_ID:+-f to_id="$AUDIT_TO_ID"}
 

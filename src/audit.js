@@ -310,14 +310,23 @@ async function auditBatches({
   return summary;
 }
 
-// Whether an until-done chain starts another run. It continues while runs make progress, also
-// when the API kept failing (cooldown: the next run waits first, as Gemma overloads come and go).
-// It stops when nothing is left or a run audited nothing (the API is down, or only products the
-// model keeps skipping are left); the next scheduled run picks up from there.
-function continueDecision(summary, remaining) {
-  if (!remaining) return { continue: false, cooldown: false, reason: "denetlenecek ürün kalmadı" };
-  if (!summary.audited) return { continue: false, cooldown: false, reason: "bu çalışmada hiç ürün denetlenemedi" };
-  return { continue: true, cooldown: summary.stoppedEarly === STOPPED_BY_FAILURES, reason: "" };
+const MAX_EMPTY_RUNS = 6;
+
+// Whether an until-done chain starts another run and how long it waits first. Gemma overloads
+// come and go, so the chain continues through them: 5 minutes after a run that ended on errors,
+// 30 minutes after a run that audited nothing. It stops when nothing is left or after
+// MAX_EMPTY_RUNS runs in a row audited nothing (the API is down, or only products the model keeps
+// skipping are left); the next scheduled run picks up from there.
+// emptyRuns: runs in a row before this one that audited nothing.
+function continueDecision(summary, remaining, emptyRuns = 0) {
+  if (!remaining) return { continue: false, cooldownMinutes: 0, emptyRuns: 0, reason: "denetlenecek ürün kalmadı" };
+  if (!summary.audited) {
+    if (emptyRuns + 1 >= MAX_EMPTY_RUNS) {
+      return { continue: false, cooldownMinutes: 0, emptyRuns: emptyRuns + 1, reason: `art arda ${MAX_EMPTY_RUNS} çalışmada hiç ürün denetlenemedi` };
+    }
+    return { continue: true, cooldownMinutes: 30, emptyRuns: emptyRuns + 1, reason: "" };
+  }
+  return { continue: true, cooldownMinutes: summary.stoppedEarly === STOPPED_BY_FAILURES ? 5 : 0, emptyRuns: 0, reason: "" };
 }
 
 module.exports = {

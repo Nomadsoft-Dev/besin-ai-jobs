@@ -4,7 +4,7 @@ const assert = require("node:assert/strict");
 const test = require("node:test");
 const { auditBatches, buildBatches, continueDecision, validateAuditOutput } = require("../src/audit");
 const { buildProductRecords, recordHash, selectProductsToAudit } = require("../src/catalog");
-const { createGeminiClient } = require("../src/gemini");
+const { createGeminiClient, parseJsonLoose } = require("../src/gemini");
 
 const record = (id, linkedIds = [1, 2, 3]) => ({
   product_id: id,
@@ -53,9 +53,12 @@ test("an until-done chain continues only while it makes progress and products ar
   const run = (overrides) => ({ audited: 100, stoppedEarly: "time budget reached", ...overrides });
   assert.equal(continueDecision(run(), 500).continue, true);
   assert.equal(continueDecision(run(), 0).continue, false);
-  assert.deepEqual(continueDecision(run({ stoppedEarly: "3 consecutive failed batches" }), 500), { continue: true, cooldown: true, reason: "" },
-    "a run that made progress before repeated errors continues after a cooldown");
-  assert.equal(continueDecision(run({ audited: 0 }), 3).continue, false, "only products the model keeps skipping are left");
+  assert.deepEqual(continueDecision(run({ stoppedEarly: "3 consecutive failed batches" }), 500), { continue: true, cooldownMinutes: 5, emptyRuns: 0, reason: "" },
+    "a run that made progress before repeated errors continues after a short cooldown");
+  assert.deepEqual(continueDecision(run({ audited: 0 }), 500, 2), { continue: true, cooldownMinutes: 30, emptyRuns: 3, reason: "" },
+    "a run that audited nothing waits 30 minutes");
+  assert.equal(continueDecision(run({ audited: 0 }), 500, 5).continue, false, "the sixth empty run in a row ends the chain");
+  assert.equal(continueDecision(run(), 500, 5).emptyRuns, 0, "progress resets the count");
 });
 
 test("batches respect both the product count and the prompt size", () => {
@@ -222,6 +225,12 @@ test("a primary model that keeps failing is skipped for ten minutes", async () =
   models.length = 0;
   await client.generateJson("p", {});
   assert.equal(models[0], "big", "after the pause the primary model is tried again");
+});
+
+test("an answer wrapped in a code fence or extra text is still read", () => {
+  assert.deepEqual(parseJsonLoose('```json\n{"items":[]}\n```'), { items: [] });
+  assert.deepEqual(parseJsonLoose('Sonuç: {"items":[{"product_id":1}]} bitti.'), { items: [{ product_id: 1 }] });
+  assert.throws(() => parseJsonLoose("no json here"));
 });
 
 test("the Gemini client does not retry past the deadline", async () => {

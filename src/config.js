@@ -26,10 +26,11 @@ function loadConfig(cwd = process.cwd(), env = { ...readEnvFile(path.join(cwd, "
     gemini: {
       apiKeys: [...new Set([env.GEMINI_API_KEY, env.GEMINI_API_KEY_2].map((key) => String(key || "").trim()).filter(Boolean))],
       model: env.AUDIT_MODEL || "gemma-4-31b-it",
-      // Answers when the primary model fails; AUDIT_FALLBACK_MODEL=none turns it off.
-      fallbackModel: env.AUDIT_FALLBACK_MODEL === "none" ? "" : env.AUDIT_FALLBACK_MODEL || "gemma-4-26b-a4b-it",
+      // Optional model that answers when the primary model fails. Off by default: gemma-4-26b-a4b-it
+      // answered reliably but reported almost none of the problems 31B finds.
+      fallbackModel: ["", "none"].includes(String(env.AUDIT_FALLBACK_MODEL || "")) ? "" : env.AUDIT_FALLBACK_MODEL,
       attempts: number(env.AUDIT_ATTEMPTS, 5),
-      timeoutMs: number(env.AUDIT_TIMEOUT_MS, 300000),
+      timeoutMs: number(env.AUDIT_TIMEOUT_MS, 180000),
       // Gemma allows ~16K input tokens per minute per project (each key is its own project). A
       // batch is ~4K tokens; starting one every 30 s per key uses about half of that. A response
       // takes 1-4 minutes, so two requests per key keep the key busy.

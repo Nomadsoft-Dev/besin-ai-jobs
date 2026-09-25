@@ -78,7 +78,7 @@ async function main() {
     // A dry run reads inside a read-only transaction, needs no ai_jobs tables and writes
     // findings only to output/dry-run.json.
     if (dryRun) await client.query("BEGIN READ ONLY");
-    const { records, auditedHashes } = await loadCatalog(client, { withState: !dryRun });
+    const { records, auditedHashes, ingredientUsage } = await loadCatalog(client, { withState: !dryRun });
     // In an until-done chain the time budget, not the daily limit, ends each run.
     const defaultLimit = dryRun ? 20 : untilDone ? Infinity : config.audit.dailyLimit;
     const pending = selectProductsToAudit(records, auditedHashes, Infinity, { fromId, toId }).length;
@@ -88,7 +88,7 @@ async function main() {
 
     const dryResults = [];
     const summary = await auditBatches({
-      client, gemini, batches, template, maxMinutes: config.audit.maxMinutes, concurrency: gemini.slots,
+      client, gemini, batches, template, maxMinutes: config.audit.maxMinutes, concurrency: gemini.slots, ingredientUsage,
       ...(dryRun ? { save: async (result) => { dryResults.push(result); } } : {}),
     });
     if (dryRun) await client.query("ROLLBACK");

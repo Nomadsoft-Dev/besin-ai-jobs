@@ -82,6 +82,13 @@ function selectProductsToAudit(records, auditedHashes, limit, { fromId = null, t
   return [...fresh.sort(newestFirst), ...changed.sort(newestFirst), ...unchanged.sort(newestFirst)].slice(0, limit);
 }
 
+// How many products link each ingredient.
+function ingredientUsage(links) {
+  const usage = new Map();
+  for (const link of links) usage.set(Number(link.ingredients_id), (usage.get(Number(link.ingredients_id)) || 0) + 1);
+  return usage;
+}
+
 // withState: false skips ai_jobs (dry runs work before the audit tables exist).
 async function loadCatalog(client, { withState = true } = {}) {
   const tables = { state: [] };
@@ -91,8 +98,11 @@ async function loadCatalog(client, { withState = true } = {}) {
   }
   return {
     records: buildProductRecords(tables),
+    ingredientUsage: ingredientUsage(tables.links),
     auditedHashes: new Map(tables.state.map((row) => [Number(row.product_id), row.data_hash])),
   };
 }
 
-module.exports = { NUTRITION_FIELDS, buildProductRecords, categoryPath, loadCatalog, recordHash, selectProductsToAudit };
+module.exports = {
+  NUTRITION_FIELDS, buildProductRecords, categoryPath, ingredientUsage, loadCatalog, recordHash, selectProductsToAudit,
+};

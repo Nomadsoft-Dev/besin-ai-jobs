@@ -15,7 +15,7 @@ Kurallar:
 - null değer "bilinmiyor" demektir; null'ı sıfır sayma ve tek başına hata olarak bildirme.
 - Emin olmadığın bir şeyi bildirme. Her bulgunun kanıtı ürün kaydında görünmelidir.
 - evidence alanına kısa ve somut Türkçe bir açıklama yaz (en fazla 200 karakter).
-- ingredient_ids alanına ilgili linked_ingredients id değerlerini yaz; duplicate_ingredient için ilk sıraya korunması gereken kaydı koy.
+- ingredient_ids alanına ilgili linked_ingredients id değerlerini yaz.
 - suggestion alanına tek cümlelik bir düzeltme önerisi yaz.
 - Sorunu olmayan ürün için issues boş liste olmalıdır. Her product_id için tam olarak bir kayıt döndür.
 

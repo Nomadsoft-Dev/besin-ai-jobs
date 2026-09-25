@@ -62,7 +62,7 @@ Kolonlar soldan sağa karar vermek için gereken sırayla gelir; başka tabloya 
 | `evidence`, `suggestion` | Modelin kısa kanıtı ve önerisi |
 | `on_approve` | Onaylarsan ne olur. Ör. *SQL ile düzelir: "Kakao Kitlesi" (#55) bağlantısı silinir, "Kakao Kütlesi" (#56) kalır.* veya *Elle düzeltilir…* |
 | `product_data` | Bulgunun ilgili olduğu veri: içindekiler metni ve bağlı bileşenler ya da 100 g besin değerleri |
-| `ingredient_ids` | İlgili bileşen ID'leri. Tekrarda **ilk ID korunur**, diğerleri kaldırılır. |
+| `ingredient_ids` | İlgili bileşen ID'leri. Tekrarda **ilk ID korunur**: katalogda en çok üründe kullanılan kayıt (model hangi sırayla verirse versin), diğerleri kaldırılır. |
 
 Durumlar: `open` (inceleme bekliyor), `approved` (düzeltilecek), `rejected` (yanlış alarm),
 `applied` (düzeltme SQL'i çalıştırıldı), `resolved` (ürün değişti ve sorun artık bulunmuyor).

@@ -138,9 +138,16 @@ function describeProductData(type, record) {
   return clean.length > MAX_PRODUCT_DATA ? `${clean.slice(0, MAX_PRODUCT_DATA - 1)}…` : clean;
 }
 
+// The record a duplicate keeps: the one linked to the most products in the catalog (then the
+// lower id), so every product keeps the same record whatever order the model used.
+function keepMostUsedFirst(ids, ingredientUsage) {
+  return [...ids].sort((left, right) => (ingredientUsage.get(right) || 0) - (ingredientUsage.get(left) || 0) || left - right);
+}
+
 // Keeps only findings the product record can support. Products the model skipped or
 // returned twice are left out so they are audited again on the next run.
-function validateAuditOutput(output, records) {
+// ingredientUsage: ingredient id -> number of products linking it.
+function validateAuditOutput(output, records, ingredientUsage = new Map()) {
   const byId = new Map(records.map((record) => [record.product_id, record]));
   const items = Array.isArray(output?.items) ? output.items : [];
   const counts = new Map();
@@ -155,8 +162,9 @@ function validateAuditOutput(output, records) {
     const findings = new Map();
     for (const issue of Array.isArray(item.issues) ? item.issues : []) {
       if (!ISSUE_TYPES.includes(issue?.type) || !SEVERITIES.includes(issue?.severity)) continue;
-      const ids = [...new Set((Array.isArray(issue.ingredient_ids) ? issue.ingredient_ids : []).map(Number))];
+      let ids = [...new Set((Array.isArray(issue.ingredient_ids) ? issue.ingredient_ids : []).map(Number))];
       if (ids.some((id) => !linkedIds.has(id))) continue;
+      if (issue.type === "duplicate_ingredient") ids = keepMostUsedFirst(ids, ingredientUsage);
       if (issue.type === "duplicate_ingredient" && ids.length < 2) continue;
       if (issue.type === "extra_ingredient" && ids.length < 1) continue;
       const evidence = cleanText(issue.evidence);
@@ -233,7 +241,7 @@ async function saveAuditResult(client, { productId, hash, model, findings }) {
 // concurrency lets each API key carry its own request (the Gemini client enforces the per-key
 // pace). Saves are serialized because they share one database connection and transaction.
 async function auditBatches({
-  client, gemini, batches, template, maxMinutes, concurrency = 1, now = Date.now, log = console.log,
+  client, gemini, batches, template, maxMinutes, concurrency = 1, ingredientUsage = new Map(), now = Date.now, log = console.log,
   save = (result) => saveAuditResult(client, result),
 }) {
   const startedAt = now();
@@ -256,7 +264,7 @@ async function auditBatches({
     const prompt = template.replace("{{products}}", JSON.stringify(records));
     try {
       const { output, usage } = await gemini.generateJson(prompt, AUDIT_SCHEMA, { deadline });
-      const audited = validateAuditOutput(output, records);
+      const audited = validateAuditOutput(output, records, ingredientUsage);
       await serialized(async () => {
         for (const item of batch) {
           const findings = audited.get(item.record.product_id);

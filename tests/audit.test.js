@@ -80,7 +80,7 @@ test("model output is kept only when the product record supports it", () => {
       { product_id: 2, issues: [] },
       { product_id: 404, issues: [] },
     ],
-  }, records);
+  }, records, new Map([[1, 500], [2, 3]]));
 
   assert.deepEqual([...audited.keys()], [1], "product 2 was returned twice and 3 was omitted");
   const findings = audited.get(1);
@@ -90,7 +90,7 @@ test("model output is kept only when the product record supports it", () => {
   ]);
   assert.equal(findings[0].fingerprint, "1:duplicate_ingredient:1,2");
   assert.match(findings[1].fingerprint, /^1:nutrition_inconsistent::[0-9a-f]{12}$/);
-  assert.deepEqual(findings[0].ingredientIds, [2, 1], "the first id is the one to keep");
+  assert.deepEqual(findings[0].ingredientIds, [1, 2], "the model listed 2 first, but 1 is linked to more products and is kept");
   assert.equal(findings[1].evidence, "Şeker > karbonhidrat. / Doymuş yağ > yağ.");
 });
 
@@ -110,7 +110,7 @@ test("each finding carries the product name and a plain description of the data 
     issue("extra_ingredient", [70]),
     issue("nutrition_inconsistent", []),
     issue("missing_ingredient", []),
-  ] }] }, [product]).get(4521);
+  ] }] }, [product], new Map([[56, 752], [55, 12]])).get(4521);
 
   assert.deepEqual(findings.map((finding) => [finding.productName, finding.brandName]), Array(4).fill(["Çikolatalı Gofret", "Tadım"]));
   assert.deepEqual(findings.map((finding) => finding.onApprove), [

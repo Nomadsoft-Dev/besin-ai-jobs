@@ -35,6 +35,11 @@ on:
         required: false
         default: ""
         type: string
+      model:
+        description: Model for this run only (empty = AUDIT_MODEL)
+        required: false
+        default: ""
+        type: string
       dry_run:
         description: Deneme (veritabanına yazmaz; limit boşsa 20 ürün). Bulgular public loga yazılmaz, sadece sayılar görünür.
         required: false
@@ -46,9 +51,10 @@ permissions:
   # Only for an until-done chain: the last step starts the next run of this workflow.
   actions: write
 
-# A run started while another is going waits for it, so chained runs never overlap.
+# A run started while another is going waits for it, so chained runs never overlap. Dry runs
+# write nothing and have their own queue.
 concurrency:
-  group: product-audit
+  group: product-audit-${{ inputs.dry_run && 'dry' || 'live' }}
   cancel-in-progress: false
 
 jobs:
@@ -82,7 +88,7 @@ jobs:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GEMINI_API_KEY_2: ${{ secrets.GEMINI_API_KEY_2 }}
-          AUDIT_MODEL: ${{ vars.AUDIT_MODEL || 'gemma-4-31b-it' }}
+          AUDIT_MODEL: ${{ inputs.model || vars.AUDIT_MODEL || 'gemma-4-31b-it' }}
           AUDIT_FALLBACK_MODEL: ${{ vars.AUDIT_FALLBACK_MODEL || 'none' }}
           AUDIT_DAILY_LIMIT: ${{ vars.AUDIT_DAILY_LIMIT || '1000' }}
           AUDIT_MAX_MINUTES: ${{ vars.AUDIT_MAX_MINUTES || '90' }}

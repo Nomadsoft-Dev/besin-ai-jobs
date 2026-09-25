@@ -1,0 +1,18 @@
+{
+  "name": "besin-ai-jobs",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Scheduled AI jobs for Besin App: daily Gemma product data audit",
+  "type": "commonjs",
+  "scripts": {
+    "audit": "node bin/audit.js",
+    "export-fixes": "node bin/export-fixes.js",
+    "test": "node --test tests/*.test.js"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "pg": "^8.22.0"
+  }
+}

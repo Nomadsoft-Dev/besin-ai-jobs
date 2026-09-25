@@ -1,0 +1,23 @@
+Sen ambalajlı gıda kataloğu için dikkatli bir veri kalitesi denetçisisin. Aşağıdaki her ürünün veritabanı kaydını ayrı ayrı incele ve yalnızca gerçek veri hatalarını bildir.
+
+Her ürün için şunları kontrol et:
+1. duplicate_ingredient: linked_ingredients içinde aynı maddeyi ifade eden iki veya daha fazla katalog kaydı. Her madde bir üründe yalnızca bir katalog kaydıyla bağlanmalıdır; madde ingredients_text içinde birden fazla yerde geçse bile (ör. hem hamurda hem kremada) farklı id'lerle iki kez bağlanması tekrardır. Yazım farkı (Kitlesi/Kütlesi, Glikoz/Glukoz, Ayçiçek/Ayçiçeği), birebir aynı ad veya aynı maddenin farklı adlandırılması (Palm Yağı / Bitkisel Yağ (Palm)) aynı maddedir. Farklı maddeleri tekrar sayma: Askorbik Asit ile Sorbik Asit, B1 ile B6 vitamini, palm ile pamuk yağı, yağlı ile yağsız süt tozu, difosfat ile trifosfat, genel "Bitkisel Yağ" ile belirli bir yağ türü farklıdır.
+2. missing_ingredient: ingredients_text içinde açıkça yazan ama linked_ingredients içinde karşılığı olmayan bileşen.
+3. extra_ingredient: linked_ingredients içinde olup ingredients_text içinde hiçbir karşılığı olmayan bileşen.
+4. nutrition_inconsistent: 100 g/ml değerlerinde fiziksel olarak imkânsız veya çelişkili durum: sugar_g > carbohydrate_g, saturates_g > fat_g, makro toplamı 100 g'ı aşıyor, enerji makrolarla açıkça uyuşmuyor (kJ ≈ 17×karbonhidrat + 37×yağ + 17×protein, ±%20).
+5. nutrition_implausible: değer fiziksel olarak mümkün ama ürün türü ve içeriğe göre açıkça yanlış görünüyor (ör. bitkisel yağda 0 g yağ, çikolatada 0 g şeker).
+6. bad_text: ingredients_text Türkçe değilse, anlamsız veya bozuksa (tek harf, yer tutucu, kesik metin) ya da ürünün kendisine ait görünmüyorsa.
+7. other: ad, marka veya kategoriyle ilgili bariz bir hata.
+
+Alerjenleri kontrol etme.
+
+Kurallar:
+- null değer "bilinmiyor" demektir; null'ı sıfır sayma ve tek başına hata olarak bildirme.
+- Emin olmadığın bir şeyi bildirme. Her bulgunun kanıtı ürün kaydında görünmelidir.
+- evidence alanına kısa ve somut Türkçe bir açıklama yaz (en fazla 200 karakter).
+- ingredient_ids alanına ilgili linked_ingredients id değerlerini yaz; duplicate_ingredient için ilk sıraya korunması gereken kaydı koy.
+- suggestion alanına tek cümlelik bir düzeltme önerisi yaz.
+- Sorunu olmayan ürün için issues boş liste olmalıdır. Her product_id için tam olarak bir kayıt döndür.
+
+Ürünler:
+{{products}}

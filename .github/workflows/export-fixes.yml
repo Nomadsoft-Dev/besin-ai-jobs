@@ -1,0 +1,39 @@
+name: Export approved fixes
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: export-fixes
+  cancel-in-progress: false
+
+jobs:
+  export:
+    name: Build SQL for approved findings
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # The SQL is written to ai_jobs.product_audit_fix_exports, not to logs or artifacts,
+      # which are public in a public repository.
+      - name: Export approved fixes
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: node bin/export-fixes.js
+

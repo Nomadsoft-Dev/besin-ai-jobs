@@ -119,6 +119,10 @@ test("each finding carries the product name and a plain description of the data 
     "Elle düzeltilir: onaylarsan elle düzeltme listesine eklenir, SQL üretilmez.",
     "Elle düzeltilir: onaylarsan elle düzeltme listesine eklenir, SQL üretilmez.",
   ]);
+  const koruyucu = { ...product, linked_ingredients: [...product.linked_ingredients, { id: 1041, name: "Koruyucu" }] };
+  const [classFinding] = validateAuditOutput({ items: [{ product_id: 4521, issues: [issue("missing_ingredient", [1041])] }] }, [koruyucu]).get(4521);
+  assert.equal(classFinding.onApprove,
+    'Elle düzeltilir: "Koruyucu" (#1041) bağlantısı kaldırılıp metindeki maddeler ayrı ayrı bağlanmalı; SQL üretilmez.');
   assert.equal(findings[0].productData,
     "İçindekiler: Buğday unu, şeker, kakao kütlesi | Bağlı bileşenler: Buğday Unu (#12), Kakao Kütlesi (#56), Kakao Kitlesi (#55), Süt Tozu (#70)");
   assert.equal(findings[2].productData,

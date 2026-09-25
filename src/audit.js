@@ -113,6 +113,11 @@ function describeApproval(type, ids, record) {
     return `SQL ile düzelir: ${labels(remove)} bağlantısı silinir, ${ingredientLabel(record, keep)} kalır.`;
   }
   if (type === "extra_ingredient") return `SQL ile düzelir: ${labels(ids)} bağlantısı silinir.`;
+  // A missing finding with ids points at a function name ("Koruyucu") linked in place of the
+  // specific additives the text names.
+  if (type === "missing_ingredient" && ids.length) {
+    return `Elle düzeltilir: ${labels(ids)} bağlantısı kaldırılıp metindeki maddeler ayrı ayrı bağlanmalı; SQL üretilmez.`;
+  }
   const related = ids.length ? ` İlgili bileşenler: ${labels(ids)}.` : "";
   return `Elle düzeltilir: onaylarsan elle düzeltme listesine eklenir, SQL üretilmez.${related}`;
 }

@@ -55,6 +55,7 @@ async function writeStepSummary(summary, { dryRun, fromId, toId, force, remainin
     `- Bulgu: ${summary.findings}`,
     `- Atlanan ürün (sonraki çalışmada tekrar denenecek): ${summary.skipped}`,
     `- Başarısız istek grubu: ${summary.failedBatches}`,
+    summary.fallbackBatches ? `- Yedek modelin cevapladığı grup: ${summary.fallbackBatches}` : "",
     summary.stoppedEarly ? `- Erken durdu: ${summary.stoppedEarly}` : "",
     remaining === null ? "" : `- Denetlenmeyi bekleyen ürün: ${remaining}`,
     untilDone ? `- Zincir: ${next.continue ? `sonraki çalışma başlatıldı${next.cooldown ? " (Gemini hataları nedeniyle 5 dakika sonra)" : ""}` : `durdu (${next.reason})`}` : "",
@@ -84,7 +85,7 @@ async function main() {
     const pending = selectProductsToAudit(records, auditedHashes, Infinity, { fromId, toId }).length;
     const selected = selectProductsToAudit(records, auditedHashes, limit ?? defaultLimit, { fromId, toId, force });
     const batches = buildBatches(selected, config.audit.batchSize, config.audit.maxBatchChars);
-    console.log(`[audit]${dryRun ? " DRY RUN" : ""} ${records.length} products, ${auditedHashes.size} audited before, ${selected.length} selected${describeRange({ fromId, toId, force })} in ${batches.length} batch(es) with ${gemini.model}`);
+    console.log(`[audit]${dryRun ? " DRY RUN" : ""} ${records.length} products, ${auditedHashes.size} audited before, ${selected.length} selected${describeRange({ fromId, toId, force })} in ${batches.length} batch(es) with ${gemini.model}${gemini.fallbackModel ? ` (fallback ${gemini.fallbackModel})` : ""}`);
 
     const dryResults = [];
     const summary = await auditBatches({

@@ -78,6 +78,7 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GEMINI_API_KEY_2: ${{ secrets.GEMINI_API_KEY_2 }}
           AUDIT_MODEL: ${{ vars.AUDIT_MODEL || 'gemma-4-31b-it' }}
+          AUDIT_FALLBACK_MODEL: ${{ vars.AUDIT_FALLBACK_MODEL || 'gemma-4-26b-a4b-it' }}
           AUDIT_DAILY_LIMIT: ${{ vars.AUDIT_DAILY_LIMIT || '1000' }}
           AUDIT_MAX_MINUTES: ${{ vars.AUDIT_MAX_MINUTES || '90' }}
           AUDIT_KEY_CONCURRENCY: ${{ vars.AUDIT_KEY_CONCURRENCY || '2' }}

@@ -26,6 +26,8 @@ function loadConfig(cwd = process.cwd(), env = { ...readEnvFile(path.join(cwd, "
     gemini: {
       apiKeys: [...new Set([env.GEMINI_API_KEY, env.GEMINI_API_KEY_2].map((key) => String(key || "").trim()).filter(Boolean))],
       model: env.AUDIT_MODEL || "gemma-4-31b-it",
+      // Answers when the primary model fails; AUDIT_FALLBACK_MODEL=none turns it off.
+      fallbackModel: env.AUDIT_FALLBACK_MODEL === "none" ? "" : env.AUDIT_FALLBACK_MODEL || "gemma-4-26b-a4b-it",
       attempts: number(env.AUDIT_ATTEMPTS, 5),
       timeoutMs: number(env.AUDIT_TIMEOUT_MS, 300000),
       // Gemma allows ~16K input tokens per minute per project (each key is its own project). A

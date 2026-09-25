@@ -185,6 +185,45 @@ test("the Gemini client retries overload errors and fails fast on bad requests",
   assert.equal(badCalls, 1);
 });
 
+test("a failed primary model request is retried at once with the fallback model", async () => {
+  const models = [];
+  const waits = [];
+  const client = createGeminiClient({
+    apiKeys: ["k"], model: "gemma-4-31b-it", fallbackModel: "gemma-4-26b-a4b-it", keyIntervalMs: 0,
+    sleep: async (ms) => { waits.push(ms); },
+    fetch: async (url) => {
+      models.push(url.match(/models\/([^:]+):/)[1]);
+      return url.includes("31b")
+        ? { ok: false, status: 500, text: async () => "Internal error" }
+        : { ok: true, json: async () => ({ candidates: [{ content: { parts: [{ text: '{"items":[]}' }] } }] }) };
+    },
+  });
+  const result = await client.generateJson("p", {});
+  assert.equal(result.model, "gemma-4-26b-a4b-it");
+  assert.deepEqual(models, ["gemma-4-31b-it", "gemma-4-26b-a4b-it"]);
+  assert.deepEqual(waits, [], "switching models needs no backoff");
+});
+
+test("a primary model that keeps failing is skipped for ten minutes", async () => {
+  let clock = 0;
+  const models = [];
+  const client = createGeminiClient({
+    apiKeys: ["k"], model: "big", fallbackModel: "small", keyIntervalMs: 0, now: () => clock, sleep: async () => {},
+    fetch: async (url) => {
+      models.push(url.includes("big") ? "big" : "small");
+      return url.includes("big")
+        ? { ok: false, status: 503, text: async () => "high demand" }
+        : { ok: true, json: async () => ({ candidates: [{ content: { parts: [{ text: '{"items":[]}' }] } }] }) };
+    },
+  });
+  for (let request = 0; request < 6; request += 1) await client.generateJson("p", {});
+  assert.equal(models.filter((model) => model === "big").length, 5, "the sixth request goes straight to the fallback");
+  clock += 10 * 60000;
+  models.length = 0;
+  await client.generateJson("p", {});
+  assert.equal(models[0], "big", "after the pause the primary model is tried again");
+});
+
 test("the Gemini client does not retry past the deadline", async () => {
   let clock = 0;
   let calls = 0;

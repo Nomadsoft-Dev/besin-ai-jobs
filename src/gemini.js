@@ -5,6 +5,9 @@ const { setTimeout: sleep } = require("node:timers/promises");
 const BASE_URL = "https://generativelanguage.googleapis.com/v1beta";
 const RETRYABLE_STATUS = new Set([408, 429, 500, 502, 503, 504]);
 const BACKOFF_MS = [15000, 30000, 60000, 120000];
+// After this many failed requests in a row, the primary model is skipped for PRIMARY_PAUSE_MS.
+const PRIMARY_FAILURE_LIMIT = 5;
+const PRIMARY_PAUSE_MS = 10 * 60000;
 
 class GeminiError extends Error {
   constructor(message, { status = 0, retryable = false } = {}) {
@@ -32,8 +35,11 @@ function retryDelayMs(message, attempt) {
 // Sends JSON-schema requests. Each API key carries at most keyConcurrency requests at a time and
 // starts a new one only keyIntervalMs after its previous start, so a key stays within its
 // per-minute token budget; with several keys, concurrent callers use them in parallel.
+// fallbackModel (optional) answers when the primary model fails: a request tries the primary
+// model once and retries with the fallback, and a primary model that keeps failing is skipped
+// for a while.
 function createGeminiClient(options) {
-  const { apiKeys, model, attempts = 5, timeoutMs = 300000, keyIntervalMs = 65000, keyConcurrency = 1 } = options;
+  const { apiKeys, model, fallbackModel = "", attempts = 5, timeoutMs = 300000, keyIntervalMs = 65000, keyConcurrency = 1 } = options;
   if (!apiKeys?.length) throw new Error("GEMINI_API_KEY (or GEMINI_API_KEY_2) is required");
   if (!model) throw new Error("A model is required");
   const doFetch = options.fetch || fetch;
@@ -42,6 +48,8 @@ function createGeminiClient(options) {
   const nextAllowedAt = apiKeys.map(() => 0);
   const inFlight = apiKeys.map(() => 0);
   const waiting = [];
+  let primaryFailures = 0;
+  let primaryPausedUntil = 0;
 
   async function acquireKey() {
     for (;;) {
@@ -65,19 +73,19 @@ function createGeminiClient(options) {
     waiting.shift()?.();
   }
 
-  async function sendOnce(prompt, schema) {
+  async function sendOnce(prompt, schema, useModel) {
     const keyIndex = await acquireKey();
     try {
-      return await sendWithKey(apiKeys[keyIndex], prompt, schema);
+      return await sendWithKey(apiKeys[keyIndex], prompt, schema, useModel);
     } finally {
       releaseKey(keyIndex);
     }
   }
 
-  async function sendWithKey(key, prompt, schema) {
+  async function sendWithKey(key, prompt, schema, useModel) {
     let response;
     try {
-      response = await doFetch(`${BASE_URL}/models/${encodeURIComponent(model)}:generateContent`, {
+      response = await doFetch(`${BASE_URL}/models/${encodeURIComponent(useModel)}:generateContent`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-goog-api-key": key },
         body: JSON.stringify({
@@ -107,33 +115,58 @@ function createGeminiClient(options) {
     try {
       return { output: JSON.parse(content), usage: body.usageMetadata || null };
     } catch {
-      throw new GeminiError("Gemini returned invalid JSON", { retryable: true });
+      const finish = body?.candidates?.[0]?.finishReason || "unknown";
+      throw new GeminiError(`Gemini returned invalid JSON (finishReason ${finish}, ${content.length} chars)`, { retryable: true });
     }
   }
 
-  // deadline (epoch ms, optional): no retry starts after it.
+  // The first attempt uses the primary model unless it is paused; later attempts use the fallback.
+  function modelFor(attempt) {
+    if (!fallbackModel) return model;
+    return attempt === 1 && now() >= primaryPausedUntil ? model : fallbackModel;
+  }
+
+  function recordPrimary(ok) {
+    if (ok) {
+      primaryFailures = 0;
+      return;
+    }
+    primaryFailures += 1;
+    if (fallbackModel && primaryFailures >= PRIMARY_FAILURE_LIMIT) {
+      primaryFailures = 0;
+      primaryPausedUntil = now() + PRIMARY_PAUSE_MS;
+      console.warn(`[gemini] ${model} failed ${PRIMARY_FAILURE_LIMIT} times in a row; using ${fallbackModel} for ${PRIMARY_PAUSE_MS / 60000} minutes`);
+    }
+  }
+
+  // deadline (epoch ms, optional): no retry starts after it. Returns the model that answered.
   async function generateJson(prompt, schema, { deadline = Infinity } = {}) {
     let lastError;
     for (let attempt = 1; attempt <= attempts; attempt += 1) {
+      const useModel = modelFor(attempt);
       try {
-        return await sendOnce(prompt, schema);
+        const result = await sendOnce(prompt, schema, useModel);
+        if (useModel === model) recordPrimary(true);
+        return { ...result, model: useModel };
       } catch (error) {
         lastError = error;
+        if (useModel === model && error.retryable) recordPrimary(false);
         if (!error.retryable || attempt === attempts) break;
-        const delay = retryDelayMs(error.message, attempt);
+        // Switching to the fallback model needs no backoff; retrying the same model does.
+        const delay = modelFor(attempt + 1) === useModel ? retryDelayMs(error.message, attempt) : 0;
         if (now() + delay >= deadline) {
           lastError.message += " (time budget reached; not retried)";
           break;
         }
-        console.warn(`[gemini] ${model} attempt ${attempt}/${attempts} failed: ${error.message.slice(0, 160)}; retrying in ${Math.round(delay / 1000)}s`);
-        await wait(delay);
+        console.warn(`[gemini] ${useModel} attempt ${attempt}/${attempts} failed: ${error.message.slice(0, 160)}; retrying${delay ? ` in ${Math.round(delay / 1000)}s` : ""} with ${modelFor(attempt + 1)}`);
+        if (delay) await wait(delay);
       }
     }
     throw lastError;
   }
 
   // slots: how many requests can be in flight at once across all keys.
-  return { model, keyCount: apiKeys.length, slots: apiKeys.length * keyConcurrency, generateJson };
+  return { model, fallbackModel, keyCount: apiKeys.length, slots: apiKeys.length * keyConcurrency, generateJson };
 }
 
 module.exports = { GeminiError, createGeminiClient, responseText };

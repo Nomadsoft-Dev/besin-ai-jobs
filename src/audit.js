@@ -253,7 +253,7 @@ async function auditBatches({
   // No batch starts after the deadline and a started batch is not retried past it, so the run
   // ends at most one request timeout after maxMinutes.
   const deadline = startedAt + maxMinutes * 60000;
-  const summary ={ batches: 0, failedBatches: 0, audited: 0, skipped: 0, findings: 0, stoppedEarly: "" };
+  const summary = { batches: 0, failedBatches: 0, fallbackBatches: 0, audited: 0, skipped: 0, findings: 0, stoppedEarly: "" };
   let consecutiveFailures = 0;
   let cursor = 0;
   let saving = Promise.resolve();
@@ -268,7 +268,7 @@ async function auditBatches({
     const records = batch.map((item) => item.record);
     const prompt = template.replace("{{products}}", JSON.stringify(records));
     try {
-      const { output, usage } = await gemini.generateJson(prompt, AUDIT_SCHEMA, { deadline });
+      const { output, usage, model = gemini.model } = await gemini.generateJson(prompt, AUDIT_SCHEMA, { deadline });
       const audited = validateAuditOutput(output, records, ingredientUsage);
       await serialized(async () => {
         for (const item of batch) {
@@ -277,14 +277,15 @@ async function auditBatches({
             summary.skipped += 1;
             continue;
           }
-          await save({ productId: item.record.product_id, hash: item.hash, model: gemini.model, findings });
+          await save({ productId: item.record.product_id, hash: item.hash, model, findings });
           summary.audited += 1;
           summary.findings += findings.length;
         }
       });
       summary.batches += 1;
+      if (model !== gemini.model) summary.fallbackBatches += 1;
       consecutiveFailures = 0;
-      log(`[audit] batch ${index + 1}/${batches.length}: ${audited.size}/${batch.length} products, tokens in=${usage?.promptTokenCount ?? "?"}`);
+      log(`[audit] batch ${index + 1}/${batches.length}: ${audited.size}/${batch.length} products, tokens in=${usage?.promptTokenCount ?? "?"}${model === gemini.model ? "" : `, ${model}`}`);
     } catch (error) {
       summary.failedBatches += 1;
       summary.skipped += batch.length;
